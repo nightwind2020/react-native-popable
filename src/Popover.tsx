@@ -21,7 +21,7 @@ export type PopoverProps = {
   forceInitialAnimation?: boolean;
   numberOfLines?: number;
   visible?: boolean;
-  position?: 'top' | 'right' | 'bottom' | 'left';
+  position?: 'auto' | 'top' | 'right' | 'bottom' | 'left';
 } & ViewProps;
 
 const Popover = React.forwardRef<View, PopoverProps>(function Popover(

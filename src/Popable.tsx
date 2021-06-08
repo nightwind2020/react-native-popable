@@ -1,3 +1,4 @@
+/* eslint-disable react-native/no-inline-styles */
 import React, {
   forwardRef,
   useCallback,
@@ -31,7 +32,6 @@ export type PopableProps = {
   numberOfLines?: PopoverProps['numberOfLines'];
   onAction?: (visible: boolean) => void;
   position?: PopoverProps['position'];
-  strictPosition?: boolean;
   style?: PopoverProps['style'];
   visible?: boolean;
   wrapperStyle?: ViewProps['style'];
@@ -56,8 +56,7 @@ const Popable = forwardRef<PopableManager, PopableProps>(function Popable(
     content,
     numberOfLines,
     onAction,
-    position = 'top',
-    strictPosition = false,
+    position = 'auto',
     style,
     visible,
     wrapperStyle,
@@ -73,7 +72,7 @@ const Popable = forwardRef<PopableManager, PopableProps>(function Popable(
     top: 0,
   });
   const [childrenLayout, setChildrenLayout] = useState(DEFAULT_LAYOUT);
-  const [computedPosition, setComputedPosition] = useState(position);
+  const computedPosition = useRef<PopoverProps['position']>(position);
   const isInteractive = typeof visible === 'undefined';
   const isPopoverVisible = isInteractive ? popoverVisible : visible;
   const childrenRef = useRef<View>(null);
@@ -138,57 +137,65 @@ const Popable = forwardRef<PopableManager, PopableProps>(function Popable(
   }, [childrenRef]);
 
   useEffect(() => {
-    let nextPosition = position;
+    if (popoverLayout.width !== 0 && childrenLayout.width !== 0) {
+      if (position === 'auto') {
+        computedPosition.current = 'top';
 
-    if (!strictPosition) {
-      switch (position) {
-        case 'left':
-          if (popoverLayout.x <= 0) {
-            nextPosition = 'right';
-          }
-          break;
+        if (popoverLayout.y < 0) {
+          computedPosition.current = 'bottom';
+        }
 
+        if (popoverLayout.x + popoverLayout.width > dimensions.width) {
+          computedPosition.current = 'left';
+        }
+
+        const w = (popoverLayout.width - childrenLayout.width) / 2;
+        if (popoverLayout.x - w < 0) {
+          computedPosition.current = 'right';
+        }
+      }
+    }
+  }, [position, popoverLayout, childrenLayout, dimensions]);
+
+  useEffect(() => {
+    if (computedPosition.current !== 'auto') {
+      let left = 0;
+      let top = 0;
+
+      switch (computedPosition.current) {
         case 'right':
-          if (popoverLayout.x + popoverLayout.width > dimensions.width) {
-            nextPosition = 'left';
+        case 'left':
+          const h = (popoverLayout.height - childrenLayout.height) / 2;
+          top = h;
+          if (popoverLayout.y < 0) {
+            top = 0;
+          } else if (
+            popoverLayout.y + popoverLayout.height >
+            dimensions.height
+          ) {
+            top = popoverLayout.y + popoverLayout.height - dimensions.height;
           }
           break;
 
         case 'top':
-          if (popoverLayout.y <= 0) {
-            nextPosition = 'bottom';
-          }
-          break;
-
         case 'bottom':
-          if (popoverLayout.y + popoverLayout.height >= dimensions.height) {
-            nextPosition = 'top';
+          const w = (popoverLayout.width - childrenLayout.width) / 2;
+          left = w;
+          if (popoverLayout.x - w < 0) {
+            left = 0;
+          } else if (popoverLayout.x + popoverLayout.width > dimensions.width) {
+            left = popoverLayout.x + popoverLayout.width - dimensions.width;
+          }
+
+          if (popoverLayout.y < 0) {
+            top = popoverLayout.y;
           }
           break;
       }
+
+      setPopoverOffset({ left, top });
     }
-
-    setComputedPosition(nextPosition);
-  }, [position, strictPosition, popoverLayout, childrenLayout, dimensions]);
-
-  useEffect(() => {
-    let left = 0;
-    let top = 0;
-
-    switch (computedPosition) {
-      case 'right':
-      case 'left':
-        top = (popoverLayout.height - childrenLayout.height) / 2;
-        break;
-
-      case 'top':
-      case 'bottom':
-        left = (popoverLayout.width - childrenLayout.width) / 2;
-        break;
-    }
-
-    setPopoverOffset({ left, top });
-  }, [computedPosition, popoverLayout, childrenLayout]);
+  }, [computedPosition, popoverLayout, childrenLayout, dimensions]);
 
   const sharedPopoverProps = {
     animated,
@@ -198,8 +205,16 @@ const Popable = forwardRef<PopableManager, PopableProps>(function Popable(
     caretPosition,
     children: content,
     numberOfLines,
-    position: computedPosition,
+    position: computedPosition.current,
   };
+
+  console.log({
+    computedPosition,
+    dimensions,
+    popoverLayout,
+    childrenLayout,
+    popoverOffset,
+  });
 
   return (
     <View style={[styles.container, wrapperStyle]}>
@@ -244,13 +259,15 @@ const Popable = forwardRef<PopableManager, PopableProps>(function Popable(
         onLayout={handlePopoverLayout}
         visible={Platform.OS === 'web' ? isPopoverVisible : false}
         style={[
-          computedPosition === 'top' && styles.popoverTop,
-          computedPosition === 'bottom' && styles.popoverBottom,
-          computedPosition === 'left' && {
+          computedPosition.current === 'top' && styles.popoverTop,
+          computedPosition.current === 'bottom' && styles.popoverBottom,
+          computedPosition.current === 'left' && {
             alignItems: 'flex-end',
             right: childrenLayout.width,
           },
-          computedPosition === 'right' && { left: childrenLayout.width },
+          computedPosition.current === 'right' && {
+            left: childrenLayout.width,
+          },
           {
             position: 'absolute',
             transform: [
